@@ -87,6 +87,71 @@ test('throttle drops skipped calls when trailing is false', (t) => {
   assert.deepEqual(fn.mock.calls[1].arguments, ['third']);
 });
 
+test('throttle waits for the delay before the first call when leading is false', (t) => {
+  const timers = useFakeTime(t);
+  const fn = t.mock.fn();
+  const throttled = throttle(fn, 100, { leading: false });
+
+  throttled('first');
+  throttled('second');
+
+  timers.tick(99);
+  assert.equal(fn.mock.callCount(), 0);
+
+  timers.tick(1);
+  assert.equal(fn.mock.callCount(), 1);
+  assert.deepEqual(fn.mock.calls[0].arguments, ['second']);
+});
+
+test('throttle never runs a call immediately when leading is false', (t) => {
+  const timers = useFakeTime(t);
+  const fn = t.mock.fn();
+  const throttled = throttle(fn, 100, { leading: false });
+
+  throttled('first');
+  timers.tick(100);
+  assert.equal(fn.mock.callCount(), 1);
+
+  // A call made long after the last one still waits for the delay.
+  timers.tick(500);
+  throttled('second');
+  assert.equal(fn.mock.callCount(), 1);
+
+  timers.tick(99);
+  assert.equal(fn.mock.callCount(), 1);
+
+  timers.tick(1);
+  assert.equal(fn.mock.callCount(), 2);
+  assert.deepEqual(fn.mock.calls[1].arguments, ['second']);
+});
+
+test('throttle never calls the function when leading and trailing are both false', (t) => {
+  const timers = useFakeTime(t);
+  const fn = t.mock.fn();
+  const throttled = throttle(fn, 100, { leading: false, trailing: false });
+
+  throttled();
+  timers.tick(500);
+  throttled();
+  timers.tick(500);
+
+  assert.equal(fn.mock.callCount(), 0);
+});
+
+test('throttle works when the clock starts at 0', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  const fn = t.mock.fn();
+  const throttled = throttle(fn, 100);
+
+  throttled('first');
+  throttled('second');
+
+  assert.equal(fn.mock.callCount(), 1);
+
+  t.mock.timers.tick(100);
+  assert.equal(fn.mock.callCount(), 2);
+});
+
 test('throttle preserves the this context for immediate and trailing calls', (t) => {
   const timers = useFakeTime(t);
   const contexts = [];

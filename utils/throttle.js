@@ -41,7 +41,8 @@ function throttle(fn, delay, options = {}) {
 
   const { leading = true, trailing = true } = options;
   let timeoutId = null;
-  let lastCallTime = 0;
+  // When the current delay window started; null while no window is open.
+  let lastCallTime = null;
   let lastArgs = null;
   let lastContext = null;
   let lastResult;
@@ -58,13 +59,17 @@ function throttle(fn, delay, options = {}) {
     if (timeoutId) {
       clearTimeout(timeoutId);
     }
-    
+
     timeoutId = setTimeout(() => {
       timeoutId = null;
-      if (trailing && lastArgs) {
+      if (lastArgs) {
         execute(lastContext, lastArgs);
         lastArgs = null;
         lastContext = null;
+      }
+      // Without a leading call, the next call must open a new window instead of running immediately.
+      if (!leading) {
+        lastCallTime = null;
       }
     }, Math.max(0, delay - (Date.now() - lastCallTime)));
   };
@@ -72,27 +77,22 @@ function throttle(fn, delay, options = {}) {
   // Return the throttled function
   return function throttled(...args) {
     const currentTime = Date.now();
-    const timeSinceLastCall = currentTime - lastCallTime;
-    const shouldExecuteLeading = leading && lastCallTime === 0;
 
-    // Store context and args for potential trailing execution
+    // With leading disabled, the first call of a burst only opens the delay window.
+    if (!leading && lastCallTime === null) {
+      lastCallTime = currentTime;
+    }
+
+    const windowHasPassed = lastCallTime === null || currentTime - lastCallTime >= delay;
+
+    if (leading && windowHasPassed && timeoutId === null) {
+      return execute(this, args);
+    }
+
+    // Keep the latest call so it can run when the window ends
     if (trailing) {
       lastArgs = args;
       lastContext = this;
-    }
-
-    // If this is the first call and leading is enabled, execute immediately
-    if (shouldExecuteLeading) {
-      return execute(this, args);
-    }
-
-    // If not currently throttling (lastCallTime !== 0 prevents leading: false from firing on first call)
-    if (timeSinceLastCall >= delay && timeoutId === null && lastCallTime !== 0) {
-      return execute(this, args);
-    }
-
-    // If throttling and trailing is enabled, schedule execution
-    if (trailing) {
       scheduleTrailing();
     }
 
